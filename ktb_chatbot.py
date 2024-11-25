@@ -76,7 +76,8 @@ async def add_data_to_db(db_name: str, path: str, file_type: List[str]) -> int:
             for filename in files:
                 if filename == '.DS_Store':
                     continue
-                if filename.endswith(tuple(file_type)):
+                # 파일 이름 또는 확장자와 일치하는지 확인
+                if any(filename.endswith(ft) or filename == ft for ft in file_type):
                     try:
                         file_path = search_file(repo_path, filename)
                         # Check if file exists
@@ -110,7 +111,7 @@ async def add_data_to_db(db_name: str, path: str, file_type: List[str]) -> int:
 
                                         if chunk_contents:
                                             chunk_ids = [
-                                                f"{db_name}_{i}"
+                                                f"{dirs+filename}_{i}"
                                                 for i in range(chunk_id_counter, chunk_id_counter + len(chunk_contents))
                                             ]
                                             chunk_metadatas = [file_metadata for _ in range(len(chunk_contents))]
@@ -128,7 +129,7 @@ async def add_data_to_db(db_name: str, path: str, file_type: List[str]) -> int:
                                         logger.warning(f"No chunks generated from file: {filename}")
                                 else :         
                                     if len(tiktoken.encoding_for_model(GPT_MODEL).encode(doc)) <= 8191 :
-                                        chunk_ids = [f"{filename}"]
+                                        chunk_ids = [f"{dirs+filename}"]
                                         chunk_metadatas = [file_metadata]
 
                                         vector_store.add(
@@ -150,7 +151,7 @@ async def add_data_to_db(db_name: str, path: str, file_type: List[str]) -> int:
                                             chunks.append(chunk)
 
                                         chunk_ids = [
-                                            f"{filename}_{i}"
+                                            f"{dirs+filename}_{i}"
                                             for i in range(chunk_id_counter, chunk_id_counter + len(chunks))
                                         ]
                                         chunk_metadatas = [file_metadata for _ in range(len(chunks))]

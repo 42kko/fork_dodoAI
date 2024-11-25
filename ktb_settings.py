@@ -93,7 +93,7 @@ FILE_EXTENSIONS = [
     '.ts', '.tsx',                 # TypeScript
     '.sh', '.bash',                # Shell Script
     '.sql',                        # SQL
-    '.md'                           # Markdown
+    'Dockerfile'
 ]
 EXCLUDE_DIRS = ['.git', 'node_modules', 'venv', '__pycache__', 'dist', 'tests', 'test', 'examples', 'example', '.DS_Store', 'gradle-wrapper','__MACOSX']
 BUILD_FILE_NAMES = [
