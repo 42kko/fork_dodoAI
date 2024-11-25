@@ -6,7 +6,7 @@ import os
 from typing import List, Dict, Optional, Any, Generator
 from pathlib import Path
 import logging
-import asyncio
+import tiktoken
 import aiofiles
 
 """**FUNCTION FOR CHAT**"""
@@ -47,7 +47,7 @@ def get_embedding(texts: List[str], model: str = EMBEDDING_MODEL) -> List[float]
         raise
 
 
-async def add_data_to_db(repo_name: str, path: str) -> int:
+async def add_data_to_db(db_name: str, path: str, file_type: List[str]) -> int:
     """
     Process files by chunking them, generating embeddings, and storing in ChromaDB.
 
@@ -61,7 +61,7 @@ async def add_data_to_db(repo_name: str, path: str) -> int:
     try:
         # Get or create collection
         vector_store = chroma_client.get_or_create_collection(
-            name=repo_name,
+            name=db_name,
             embedding_function=embedding_function,
             metadata=DISTANCE
         )
@@ -76,7 +76,7 @@ async def add_data_to_db(repo_name: str, path: str) -> int:
             for filename in files:
                 if filename == '.DS_Store':
                     continue
-                if filename.endswith('.md'):
+                if filename.endswith(tuple(file_type)):
                     try:
                         file_path = search_file(repo_path, filename)
                         # Check if file exists
@@ -91,50 +91,77 @@ async def add_data_to_db(repo_name: str, path: str) -> int:
 
                         async with aiofiles.open(file_path, 'r', encoding='utf-8') as file:
                             doc = await file.read()
-                            if doc.strip():  # Only process non-empty documents
-                                # Create metadata for the current file
+                            if doc.strip():
                                 file_metadata = {
                                     "filename": filename,
                                     "path": str(file_path),
-                                    "repository": repo_name
+                                    "repository": db_name
                                 }
-
+                                if filename.endswith('.md') and '.md' in file_type:
                                 # Split document into chunks
-                                chunks = markdown_splitter.split_text(doc)
-
-                                if chunks:  # Only process if we have chunks
-                                    # Process chunks and clean text
-                                    chunk_contents = [
-                                        chunk.page_content.replace('\n', ' ').strip()
-                                        for chunk in chunks
-                                        if chunk.page_content.strip()  # Skip empty chunks
-                                    ]
-
-                                    if chunk_contents:  # Only add if we have valid chunks
-                                        # Generate IDs for current chunks
-                                        chunk_ids = [
-                                            f"{repo_name}_{i}"
-                                            for i in range(chunk_id_counter, chunk_id_counter + len(chunk_contents))
+                                    chunks = markdown_splitter.split_text(doc)
+                                    
+                                    if chunks:
+                                        chunk_contents = [
+                                            chunk.page_content.replace('\n', ' ').strip()
+                                            for chunk in chunks
+                                            if chunk.page_content.strip()  # Skip empty chunks
                                         ]
 
-                                        # Create metadata list for all chunks from this file
-                                        chunk_metadatas = [file_metadata for _ in range(len(chunk_contents))]
+                                        if chunk_contents:
+                                            chunk_ids = [
+                                                f"{db_name}_{i}"
+                                                for i in range(chunk_id_counter, chunk_id_counter + len(chunk_contents))
+                                            ]
+                                            chunk_metadatas = [file_metadata for _ in range(len(chunk_contents))]
+                                            vector_store.add(
+                                                documents=chunk_contents,
+                                                metadatas=chunk_metadatas,
+                                                ids=chunk_ids
+                                            )
+                                            chunk_id_counter += len(chunk_contents)
+                                            total_files_processed += 1
+                                            print(f"Successfully processed file: {filename} - Added {len(chunk_contents)} chunks")
+                                        else:
+                                            logger.warning(f"No valid chunks found in file: {filename}")
+                                    else:
+                                        logger.warning(f"No chunks generated from file: {filename}")
+                                else :         
+                                    if len(tiktoken.encoding_for_model(GPT_MODEL).encode(doc)) <= 8191 :
+                                        chunk_ids = [f"{filename}"]
+                                        chunk_metadatas = [file_metadata]
 
-                                        # Add chunks to vector store
                                         vector_store.add(
-                                            documents=chunk_contents,
+                                            documents=[doc],
                                             metadatas=chunk_metadatas,
                                             ids=chunk_ids
                                         )
-
-                                        # Update counter and log success
-                                        chunk_id_counter += len(chunk_contents)
+                                        print(f"Successfully processed file: {filename} - Added 1 chunk")
                                         total_files_processed += 1
-                                        print(f"Successfully processed file: {filename} - Added {len(chunk_contents)} chunks")
                                     else:
-                                        logger.warning(f"No valid chunks found in file: {filename}")
-                                else:
-                                    logger.warning(f"No chunks generated from file: {filename}")
+                                        # 문서가 너무 길 경우, 슬라이딩 윈도우 기법으로 분할
+                                        max_chunk_size = 8191
+                                        overlap_size = 100  # 오버랩 크기 설정
+                                        chunks = []
+
+                                        # 슬라이딩 윈도우를 사용하여 문서 분할
+                                        for i in range(0, len(doc), max_chunk_size - overlap_size):
+                                            chunk = doc[i:i + max_chunk_size]
+                                            chunks.append(chunk)
+
+                                        chunk_ids = [
+                                            f"{filename}_{i}"
+                                            for i in range(chunk_id_counter, chunk_id_counter + len(chunks))
+                                        ]
+                                        chunk_metadatas = [file_metadata for _ in range(len(chunks))]
+
+                                        vector_store.add(
+                                            documents=chunks,
+                                            metadatas=chunk_metadatas,
+                                            ids=chunk_ids
+                                        )
+                                        print(f"Successfully processed file: {filename} - Added {len(chunks)} chunks")
+                                        total_files_processed += 1
                             else:
                                 logger.warning(f"Empty file skipped: {filename}")
 
@@ -146,17 +173,18 @@ async def add_data_to_db(repo_name: str, path: str) -> int:
                         continue
 
         if total_files_processed == 0:
-            raise ValueError("No valid files were processed")
+            logger.error("No valid files were processed")
+            return 0  # 또는 적절한 기본값 반환
 
         total_chunks = vector_store.count()
-        print(f"Successfully processed {total_files_processed} files with total {total_chunks} chunks in {repo_name}")
+        print(f"Successfully processed {total_files_processed} files with total {total_chunks} chunks in {db_name}")
         return total_chunks
 
     except Exception as e:
         logger.error(f"Error adding data to DB: {str(e)}")
         raise
 
-def db_search(query: str, db: Any, n_results: int = 5) -> Dict[str, Any]:
+def db_search(query: str, db: Any, n_results: int = 3) -> Dict[str, Any]:
     """
     Search the vector database for similar documents.
 
@@ -180,34 +208,40 @@ def db_search(query: str, db: Any, n_results: int = 5) -> Dict[str, Any]:
         logger.error(f"Error searching DB: {str(e)}")
         raise
 
-def generate_response(query: str, db: Any, chat_history: Optional[List[dict]] = None) -> Generator[Any, Any, Any]:
+def generate_response(query: str, db_list: List[Any], chat_history: Optional[List[dict]] = None) -> Generator[Any, Any, Any]:
     """model: Optional[str] = MODEL,
     Generate a response using LLM based on retrieved documents.
 
     Args:
         query (str): User query
-        db: ChromaDB collection
+        db_list: List[ChromaDB collection]
 
     Returns:
         str: Generated response
     """
     try:
-        retrieved_docs = db_search(query, db)
 
+                
+        retrieved_docs_source = db_search(query, db_list[0])
+        retrieved_docs_generated = db_search(query, db_list[1])
         # Construct prompt
         system_prompt = CHATBOT_PROMPT
         
-        user_prompt = f"""Context: {retrieved_docs['documents']}
+        user_prompt = f"""
+Context: 
+{retrieved_docs_source['documents']}
+
+{retrieved_docs_generated['documents']}
 
 User Query / Instruct: {query}
 """
-
+        print(user_prompt)
         full_prompt = [{"role": "system", "content": system_prompt}]
         if chat_history : full_prompt.extend(chat_history)  # Include previous conversation history
         full_prompt.append({"role": "user", "content": user_prompt})
         # Generate response using OpenAI
         response = client_gpt.chat.completions.create(
-            model="GPT_MODEL",  # Updated from deprecated davinci-003
+            model=GPT_MODEL,  # Updated from deprecated davinci-003
             messages=full_prompt,
             temperature=0.12,
             stream = True
@@ -236,19 +270,22 @@ def codebase_chat(query: str, repo_url: str, chat_history: List[dict] = []) -> A
     repo_name, _ = parse_repo_url(repo_url)
     try:
         # Validate repository exists
-        vector_store = chroma_client.get_collection(
-            name=repo_name,
+        vector_store_source = chroma_client.get_collection(
+            name=f"{repo_name}_source",
             embedding_function=embedding_function
         )
-        
+        vector_store_generated = chroma_client.get_collection(
+            name=f"{repo_name}_generated",
+            embedding_function=embedding_function
+        )
         # Get the collection
-        db = vector_store
+        db_list = [vector_store_source, vector_store_generated]
 
         # Generate response and get retrieved documents
         if chat_history :
-            response = generate_response(query, db, chat_history)
+            response = generate_response(query, db_list, chat_history)
         else: 
-            response = generate_response(query, db)
+            response = generate_response(query, db_list)
 
         # Log the interaction
         print(f"""
@@ -262,3 +299,42 @@ def codebase_chat(query: str, repo_url: str, chat_history: List[dict] = []) -> A
     except Exception as e:
         logger.error(f"Error in codebase chat: {str(e)}")
         raise
+
+def create_augmentation_prompt(query: str) -> str:
+    """
+    주어진 쿼리를 기반으로 쿼리 증강을 위한 프롬프트를 생성합니다.
+
+    Args:
+        query (str): 사용자 입력 쿼리
+
+    Returns:
+        str: 쿼리 증강을 위한 프롬프트
+    """
+    prompt = f"""
+    You are an intelligent assistant tasked with enhancing the following search query for better retrieval results.
+    Analyze the query and extract key elements that can be used to augment the search.
+
+    Instructions:
+    1. Identify the main topics or keywords in the query.
+    2. Consider any implicit information or context that could be relevant.
+
+    Response Augmented Query Suggestion only.
+    """
+    
+    # 메시지 형식으로 변환
+    messages = [
+        {"role": "system", "content": prompt},
+        {"role": "user", "content": query}
+    ]
+    
+    augmented_query = client_gpt.chat.completions.create(
+        model=GPT_MODEL,
+        messages=messages,
+        temperature=0.52,
+    )
+    return augmented_query.choices[0].message.content
+
+# 사용 예시
+query = "How to build this project? each frontend, backend, ai server. give me the command"
+prompt = create_augmentation_prompt(query)
+print(prompt)

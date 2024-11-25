@@ -35,7 +35,6 @@ for var in required_vars:
 
 """**PARAMETER SETTINGS**"""
 #모델 설정
-#MODEL = 'GPT_MODEL' #or gpt-4o
 MODEL = 'gemini-1.5-flash'
 GPT_MODEL = 'gpt-4o-mini'
 TEMPERATURE = 0.1

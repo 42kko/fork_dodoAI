@@ -96,7 +96,7 @@ def create_zip(directory, zip_path):
                 file_path = os.path.join(root, file)
                 zip_ref.write(file_path, os.path.relpath(file_path, directory))
 
-async def cleanup(repo_zip: str, clone_dir: str, doc_zip: str):
+async def async_cleanup(repo_zip: str, clone_dir: str, doc_zip: str):
     """임시 파일 및 디렉토리 정리"""
     try:
         # repo_zip 파일 삭제
@@ -134,4 +134,5 @@ async def upload_to_s3(bucket: str, file_path: str, key: str):
 
 def remove_markdown_blocks(content):
     content = content.replace("```markdown", "")
+    content = content.replace(f"```\n```", "```")
     return content

@@ -39,7 +39,7 @@ class TextProcessor:
     @staticmethod
     def count_tokens(text: str) -> int:
         try:
-            encoding = tiktoken.encoding_for_model("GPT_MODEL")
+            encoding = tiktoken.encoding_for_model(GPT_MODEL)
             return len(encoding.encode(text, disallowed_special=()))
         except Exception as e:
             logger.error(f"토큰 계산 오류: {str(e)}")

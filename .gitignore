@@ -226,5 +226,9 @@ pyrightconfig.json
 .ionide
 
 ktb_tokens.py
-
+!chroma_data/
+Controller/
+dododocs/
+Service/
+AuthController.md
 # End of https://www.toptal.com/developers/gitignore/api/macos,python,visualstudiocode

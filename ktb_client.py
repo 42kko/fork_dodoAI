@@ -20,7 +20,7 @@ class ChatClient:
         """
         self.base_url = base_url.rstrip('/')
         
-    def generate(self, repo_url: str, s3_path: str, include_test: bool) -> Dict[str, Any]:
+    def generate(self, repo_url: str, s3_path: str, include_test: bool, korean: bool) -> Dict[str, Any]:
         """
         문서 및 README 생성 API 요청
         
@@ -36,7 +36,8 @@ class ChatClient:
             payload = {
                 "repo_url": repo_url,
                 "s3_path": s3_path,
-                "include_test": include_test
+                "include_test": include_test,
+                "korean": korean
             }
             response = requests.post(url, json=payload)
             response.raise_for_status()
@@ -79,14 +80,15 @@ async def main():
     s3_path = "moheng-develop.zip"
 
     try:
-        # 문서 및 README 생성 테스트
+        
+        #문서 및 README 생성 테스트
         # print("\n문서 및 README 생성 테스트:")
-        # generate_response = client.generate(repo_url=repo_url, s3_path=s3_path, include_test=False)
+        # generate_response = client.generate(repo_url=repo_url, s3_path=s3_path, include_test=False, korean=True)
         # pprint.pprint(generate_response)
         
         
         # 첫 번째 질문
-        query = "How MemberController works?"
+        query = "How to build this project? each frontend, backend, ai server. give me the command"
         print(f"\n질문: {query}\n")
         print("응답:")
         full_response = ''
