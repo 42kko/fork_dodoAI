@@ -111,7 +111,7 @@ async def add_data_to_db(db_name: str, path: str, file_type: List[str]) -> int:
 
                                         if chunk_contents:
                                             chunk_ids = [
-                                                f"{dirs+filename}_{i}"
+                                                f"{os.path.join(root, filename)}_{i}"
                                                 for i in range(chunk_id_counter, chunk_id_counter + len(chunk_contents))
                                             ]
                                             chunk_metadatas = [file_metadata for _ in range(len(chunk_contents))]
@@ -129,7 +129,7 @@ async def add_data_to_db(db_name: str, path: str, file_type: List[str]) -> int:
                                         logger.warning(f"No chunks generated from file: {filename}")
                                 else :         
                                     if len(tiktoken.encoding_for_model(GPT_MODEL).encode(doc)) <= 8191 :
-                                        chunk_ids = [f"{dirs+filename}"]
+                                        chunk_ids = [f"{os.path.join(root, filename)}"]
                                         chunk_metadatas = [file_metadata]
 
                                         vector_store.add(
@@ -151,7 +151,7 @@ async def add_data_to_db(db_name: str, path: str, file_type: List[str]) -> int:
                                             chunks.append(chunk)
 
                                         chunk_ids = [
-                                            f"{dirs+filename}_{i}"
+                                            f"{os.path.join(root, filename)}_{i}"
                                             for i in range(chunk_id_counter, chunk_id_counter + len(chunks))
                                         ]
                                         chunk_metadatas = [file_metadata for _ in range(len(chunks))]
