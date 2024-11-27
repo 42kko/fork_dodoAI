@@ -55,6 +55,11 @@ chunker = TokenChunker(
         chunk_size=MAX_TOKEN_LENGTH,  # maximum tokens per chunk
         chunk_overlap=128  # overlap between chunks
     )
+embedding_chunker = TokenChunker(
+        tokenizer=tokenizer,
+        chunk_size=8191,  # maximum tokens per chunk
+        chunk_overlap=2000  # overlap between chunks
+    )
 EMBEDDING_MODEL = "text-embedding-ada-002"
 EMBEDDING_DIM = 1536
 DISTANCE = {"hnsw:space": "cosine"}

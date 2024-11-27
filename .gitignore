@@ -227,6 +227,9 @@ pyrightconfig.json
 
 ktb_tokens.py
 !chroma_data/
+*.zip
+*.txt
+kakao-25_moheng/
 Controller/
 dododocs/
 Service/

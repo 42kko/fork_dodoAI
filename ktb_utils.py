@@ -9,9 +9,12 @@ import aiofiles
 from token_chunker import *
 from ktb_settings import *
 import io
-import requests
-from PIL import Image
 import re
+import aiohttp
+import uuid
+from PIL import Image
+
+
 
 from ktb_settings import client_gpt
 from ktb_prompts import DALLE_PROMPT
@@ -92,6 +95,13 @@ class ImageProcessor:
         except FileNotFoundError:
             raise FileNotFoundError(f"File '{file_path}' does not exist.")
         
+    async def download_image(self, url: str) -> bytes:
+        """비동기적으로 이미지를 다운로드"""
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                response.raise_for_status()
+                return await response.read()
+
     def generate_image(self, description, new_size=(400, 400)):
         """DALL-E를 사용하여 이미지 생성"""
         response = self.client_gpt.images.generate(
@@ -102,12 +112,12 @@ class ImageProcessor:
             n=1,
         )
         image_url = response.data[0].url
-        image_data = requests.get(image_url).content
+        image_data = asyncio.run(self.download_image(image_url))
 
         img = Image.open(io.BytesIO(image_data))
         resized_img = img.resize(new_size)
 
-        image_path = f"generated_image.png"
+        image_path = f"generated_image_{uuid.uuid4()}.png"
         resized_img.save(image_path)
 
         return image_url, image_path

@@ -133,8 +133,8 @@ async def perform_full_generation(repo_url, clone_dir, repo_name, user_name, inc
         java_categories = check_service_annotation(java_files_path, include_test)
         
         tasks = []
-        #readme_task = asyncio.create_task(doc_processor.process_readme(repo_url, clone_dir, user_name, repo_name, korean))
-       # tasks.append(readme_task)
+        readme_task = asyncio.create_task(doc_processor.process_readme(repo_url, clone_dir, user_name, repo_name, korean))
+        tasks.append(readme_task)
         # java_categories가 있는 경우 문서 생성 태스크 추가
         doc_dir = os.path.join(clone_dir, "dododocs")
         if java_categories:
