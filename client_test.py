@@ -105,38 +105,38 @@ async def main():
             print(response_chunk, end='', flush=True)
             full_response += response_chunk
 
-        query2 = "씨팔 모르겠고 404에러나 고쳐줘. 어디부터 고쳐야됨?"
-        # query2 = "한국어로 다시 응답해줘"
-        # 두 번째 질문: 이전 응답을 한국어로 번역 요청
-        print(f"\n\n질문: {query2}\n")
-        print("응답:")
-        chat_history = [
-            {
-                "question": "질문1", "answer": "대답1"
-            },
-            {
-                "question": "질문2", "answer": "대답2"
-            },
-            {
-                "question": "질문3", "answer": "대답3"
-            }
-        ]
-        full_response2 = ''
-        # 번역 요청 스트리밍 처리
-        for response_chunk in client.chat(repo_name=repo_url, query=query2, chat_history=chat_history):
-            print(response_chunk, end='', flush=True)
-            full_response2 += response_chunk
-        query3 = "API usage and troubleshooting Error 404 for Kakao OAuth and Spring Boot backend, access token, endpoint verification, RestAssured examples, HTTP method checks, server logs."
-        # query3 = "API usage and Error 404 troubleshooting for KakaoOAuthClient and RestAssured in Spring Boot. 한국어로 응답해줘"
-        print(f"\n\n질문: {query3}\n")
-        print("응답:")
-        chat_history.extend([
-            {"question": query3, "answer": full_response2}
-        ])
+        # query2 = "씨팔 모르겠고 404에러나 고쳐줘. 어디부터 고쳐야됨?"
+        # # query2 = "한국어로 다시 응답해줘"
+        # # 두 번째 질문: 이전 응답을 한국어로 번역 요청
+        # print(f"\n\n질문: {query2}\n")
+        # print("응답:")
+        # chat_history = [
+        #     {
+        #         "question": "질문1", "answer": "대답1"
+        #     },
+        #     {
+        #         "question": "질문2", "answer": "대답2"
+        #     },
+        #     {
+        #         "question": "질문3", "answer": "대답3"
+        #     }
+        # ]
+        # full_response2 = ''
+        # # 번역 요청 스트리밍 처리
+        # for response_chunk in client.chat(repo_name=repo_url, query=query2, chat_history=chat_history):
+        #     print(response_chunk, end='', flush=True)
+        #     full_response2 += response_chunk
+        # query3 = "API usage and troubleshooting Error 404 for Kakao OAuth and Spring Boot backend, access token, endpoint verification, RestAssured examples, HTTP method checks, server logs."
+        # # query3 = "API usage and Error 404 troubleshooting for KakaoOAuthClient and RestAssured in Spring Boot. 한국어로 응답해줘"
+        # print(f"\n\n질문: {query3}\n")
+        # print("응답:")
+        # chat_history.extend([
+        #     {"question": query3, "answer": full_response2}
+        # ])
 
-        # 번역 요청 스트리밍 처리
-        for response_chunk in client.chat(repo_name=repo_url, query=query3, chat_history=chat_history):
-            print(response_chunk, end='', flush=True)
+        # # 번역 요청 스트리밍 처리
+        # for response_chunk in client.chat(repo_name=repo_url, query=query3, chat_history=chat_history):
+        #     print(response_chunk, end='', flush=True)
 
     except Exception as e:
         logger.error(f"테스트 실패: {str(e)}")

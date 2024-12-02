@@ -1,6 +1,4 @@
 from openai import OpenAI
-from langchain_text_splitters import MarkdownHeaderTextSplitter
-import anthropic
 import chromadb
 from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
 import boto3
@@ -119,7 +117,6 @@ MAX_RETRIES = 2  # 최대 재시도 횟수
 RETRY_DELAY = 3  # 재시도 간격 (초)
 INCLUDE_TEST = False
 
-client_claude = anthropic.Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
 client_gpt = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 client_gemini = OpenAI(
     api_key=os.getenv('GEMINI_API_KEY'),
@@ -136,8 +133,6 @@ else:
 
 # ChromaDB 클라이언트 초기화
 chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
-markdown_splitter = MarkdownHeaderTextSplitter(
-    headers_to_split_on=headers_to_split_on, strip_headers=False)
 embedding_function = OpenAIEmbeddingFunction(
     api_key=os.getenv('OPENAI_API_KEY'), model_name=EMBEDDING_MODEL)
 
