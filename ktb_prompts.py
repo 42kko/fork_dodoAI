@@ -275,7 +275,7 @@ For Tests:
 - Key test scenarios
 """
 
-#doc 번역
+# doc 번역
 TRANSLATE_PROMPT = '''당신은 전문 번역가입니다. 제가 제공하는 마크다운 문서를 한국어로 번역해주세요.
 
 번역 시 다음 지침을 반드시 따라주세요:
@@ -435,6 +435,7 @@ When answering:
 4. Never make up information that's not in the context
 
 Remember to:
+- User Intruction is more important than context
 - Be concise and direct
 - Cite specific parts of the context when relevant
 - Maintain a helpful and professional tone"""
@@ -1230,7 +1231,7 @@ NEW_PROMPT_SERVICE_DOC = '''
 # [Service 이름]
 
 ## 클래스 개요
-- **클래스명**: `ServiceName`
+- **클래스명**: `ServiceName` 
 - **패키지**: `package.path`
 - **역할**: 주요 책임과 역할
 - **의존성**:

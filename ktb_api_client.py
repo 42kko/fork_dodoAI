@@ -8,14 +8,18 @@ from ktb_settings import *
 
 logger = logging.getLogger(__name__)  # 추가
 
+
 class APIClient:
     """API 요청 처리 클래스"""
-    def __init__(self, api_key: str, model: str = MODEL, temperature: float = TEMPERATURE):
-        self.api_key = api_key
+
+    def __init__(self, model: str = MODEL, temperature: float = TEMPERATURE):
         self.model = model
         self.temperature = temperature
-        self.headers = {
-            "Authorization": f"Bearer {api_key}",
+
+    def _get_headers(self) -> dict:
+        """헤더를 동적으로 가져오는 메서드"""
+        return {
+            "Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}",
             "Content-Type": "application/json"
         }
 
@@ -54,7 +58,7 @@ class APIClient:
             "messages": messages,
             "temperature": self.temperature
         }
-        
+
         if self.model.startswith("claude"):
             params["max_tokens"] = max_tokens or 8192
             if stop:
@@ -72,10 +76,10 @@ class APIClient:
                 params["tools"] = tools
             if max_tokens:
                 params["max_tokens"] = max_tokens
-        
+
         return params
 
-    async def generate_text(self, session: aiohttp.ClientSession, 
+    async def generate_text(self, session: aiohttp.ClientSession,
                             prompt: str, content: str, max_retries: int = MAX_RETRIES) -> Optional[str]:
         """텍스트 생성 API 호출"""
         attempt = 0
@@ -85,21 +89,23 @@ class APIClient:
                 async with session.post(
                     "https://api.openai.com/v1/chat/completions",
                     json=json_data,
-                    headers=self.headers
+                    headers=self._get_headers()
                 ) as response:
                     if response.status == 200:
                         data = await response.json()
                         return data["choices"][0]["message"]["content"]
                     else:
                         error_text = await response.text()
-                        logger.error(f"API 오류: {response.status} - {error_text}")
+                        logger.error(
+                            f"API 오류: {response.status} - {error_text}")
                         if response.status in {502, 503, 504}:
                             # 일시적인 서버 오류일 경우 재시도
                             attempt += 1
                             logger.info(f"재시도 {attempt}/{max_retries}...")
                             await asyncio.sleep(2 ** attempt)  # 지수 백오프
                         else:
-                            raise Exception(f"API 오류: {response.status} - {error_text}")
+                            raise Exception(
+                                f"API 오류: {response.status} - {error_text}")
             except Exception as e:
                 logger.error(f"API 호출 오류: {str(e)}")
                 logger.error("스택 트레이스:", exc_info=True)
@@ -107,7 +113,7 @@ class APIClient:
         return None
 
     async def process_chunks(self, chunks: List[str], prompt: str,
-                           batch_size: int = 50) -> List[str]:
+                             batch_size: int = 50) -> List[str]:
         """청크 배치 처리"""
         results = []
         async with aiohttp.ClientSession() as session:
@@ -119,4 +125,4 @@ class APIClient:
                 ])
                 results.extend([r for r in batch_results if r is not None])
                 await asyncio.sleep(40)  # Rate limit 회피
-        return results 
+        return results

@@ -6,7 +6,7 @@ import uvicorn
 import logging
 import time
 import asyncio
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any, Tuple, Union
 import os
 
 from ktb_document_processor import DocumentProcessor
@@ -36,10 +36,11 @@ app.add_middleware(
 )
 
 # API 클라이언트 및 문서 프로세서 초기화
-api_client = APIClient(OPENAI_API_KEY)
+api_client = APIClient(os.getenv('OPENAI_API_KEY'))
 doc_processor = DocumentProcessor(api_client)
 file_utils = FileUtils()
 image_processor = ImageProcessor()
+
 
 class DocRequest(BaseModel):
     repo_url: str
@@ -47,10 +48,13 @@ class DocRequest(BaseModel):
     include_test: bool = False
     korean: bool = False
 
+
 class ChatRequest(BaseModel):
     repo_url: str
     query: str
     chat_history: Optional[List[Dict[str, Any]]] = None
+    stream: bool = False
+
 
 class ImageRequest(BaseModel):
     repo_url: str
@@ -77,6 +81,7 @@ def cleanup(repo_zip: str, clone_dir: str, doc_zip: str):
     except Exception as e:
         print(f"Cleanup failed: {str(e)}")
 
+
 async def prepare_repository(repo_url: str, s3_path: str) -> Tuple[str, str, str, str]:
     """저장소 준비: URL 파싱, S3 다운로드, 압축 해제"""
     try:
@@ -90,21 +95,22 @@ async def prepare_repository(repo_url: str, s3_path: str) -> Tuple[str, str, str
         download_zip_from_s3(BUCKET_NAME, s3_path, repo_path)
         while not os.path.exists(repo_path):
             await asyncio.sleep(0.1)
-            
+
         # 압축 해제 및 완료 확인
         extract_zip(repo_path, clone_dir)
         while not os.path.exists(clone_dir) or not os.listdir(clone_dir):
             await asyncio.sleep(0.1)
 
         print(f"Repository extraction completed: {clone_dir}")
-        
+
         return repo_path, clone_dir, repo_name, user_name
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"Repository preparation failed: {str(e)}"
         )
+
 
 async def process_docs(directory_path: dict[str, list], output_directory: str, user_name: str, repo_name: str, korean: bool) -> bool:
     """문서 생성 및 요약 처리"""
@@ -123,48 +129,58 @@ async def process_docs(directory_path: dict[str, list], output_directory: str, u
         logger.error(f"문서 생성 중 오류 발생: {str(doc_error)}")
         return False  # 예외 발생 시 False 반환
 
+
 async def perform_full_generation(repo_url, clone_dir, repo_name, user_name, include_test, korean):
     """문서 및 README 생성 작업을 백그라운드에서 수행"""
     try:
         start_time = time.perf_counter()
-        
+
         # 파일 분석 및 처리
         java_files_path = file_utils.find_files(clone_dir, (".java",))
-        java_categories = check_service_annotation(java_files_path, include_test)
-        
+        java_categories = check_service_annotation(
+            java_files_path, include_test)
+
         tasks = []
-        readme_task = asyncio.create_task(doc_processor.process_readme(repo_url, clone_dir, user_name, repo_name, korean))
+        readme_task = asyncio.create_task(doc_processor.process_readme(
+            repo_url, clone_dir, user_name, repo_name, korean))
         tasks.append(readme_task)
         # java_categories가 있는 경우 문서 생성 태스크 추가
         doc_dir = os.path.join(clone_dir, "dododocs")
         if java_categories:
-            docs_task = asyncio.create_task(process_docs(java_categories, doc_dir, user_name, repo_name, korean))
+            docs_task = asyncio.create_task(process_docs(
+                java_categories, doc_dir, user_name, repo_name, korean))
             tasks.append(docs_task)
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        readme_path, docs_dir = results if len(results) == 2 else (results[0], None)
+        readme_path, docs_dir = results if len(
+            results) == 2 else (results[0], None)
 
         if not docs_dir or not readme_path:
             logger.error("문서 또는 README 생성 실패")
             raise Exception("문서 또는 README 생성 실패")
-        
+
+        await add_data_to_db(f"{repo_name}_generated", clone_dir, [".md"])
+
         end_time = time.perf_counter()
         print(f"문서 및 README 생성 시간: {end_time - start_time} 초")
 
     except Exception as e:
         logger.error(f"문서 및 README 생성 오류")
 
+
 async def perform_readme_only_generation(repo_url, clone_dir, repo_name, user_name, korean):
     """README 생성 작업만 백그라운드에서 수행"""
     try:
         start_time = time.perf_counter()
-        
+
         # README 생성
         readme = await doc_processor.process_readme(repo_url, clone_dir, user_name, repo_name, korean)
         if not readme:
             logger.error("README 생성 실패")
             raise Exception("README 생성 실패")
-        
+
+        await add_data_to_db(f"{repo_name}_generated", clone_dir, [".md"])
+
         end_time = time.perf_counter()
         print(f"README 생성 시간: {end_time - start_time} 초")
 
@@ -175,10 +191,10 @@ async def perform_readme_only_generation(repo_url, clone_dir, repo_name, user_na
 async def perform_tasks_and_cleanup(tasks, cleanup_args, db_name, clone_dir):
     """백그라운드 작업을 수행하고 완료되면 cleanup 실행"""
     await asyncio.gather(*tasks)  # 모든 백그라운드 작업이 완료될 때까지 대기
-    #generated_files_dir = os.path.join(clone_dir, "dododocs")  # 생성된 파일이 저장된 디렉토리
-    await add_data_to_db(db_name, clone_dir, [".md"])  # 생성된 파일 저장
+    # generated_files_dir = os.path.join(clone_dir, "dododocs")  # 생성된 파일이 저장된 디렉토리
+    # await add_data_to_db(db_name, clone_dir, [".md"])  # 생성된 파일 저장
     print(f"add_data_to_db 완료: {db_name}, {clone_dir}")
-    #await async_cleanup(*cleanup_args)  # cleanup 실행
+    await async_cleanup(*cleanup_args)  # cleanup 실행
 
 
 @app.post("/generate")
@@ -199,43 +215,50 @@ async def generate(request: DocRequest, background_tasks: BackgroundTasks):
             # S3 키 생성
             readme_s3_key = f"{user_name}_{repo_name}_README.md"
             docs_s3_key = f"{user_name}_{repo_name}_DOCS.zip"
-            
+
             # 백그라운드 작업 생성
             tasks = []
             if has_java_files:
                 tasks.append(asyncio.create_task(
-                    perform_full_generation(request.repo_url, clone_dir, repo_name, user_name, request.include_test, request.korean)
+                    perform_full_generation(
+                        request.repo_url, clone_dir, repo_name, user_name, request.include_test, request.korean)
                 ))
-                response = {"readme_s3_key": readme_s3_key, "docs_s3_key": docs_s3_key}
+                response = {"readme_s3_key": readme_s3_key,
+                            "docs_s3_key": docs_s3_key}
             else:
                 tasks.append(asyncio.create_task(
-                    perform_readme_only_generation(repo_dir, clone_dir, repo_name, user_name, request.korean)
+                    perform_readme_only_generation(
+                        repo_dir, clone_dir, repo_name, user_name, request.korean)
                 ))
-                response = {"readme_s3_key": readme_s3_key, "docs_s3_key": None}
+                response = {"readme_s3_key": readme_s3_key,
+                            "docs_s3_key": None}
 
             # 소스 파일들을 DB에 저장하는 작업 추가 (비동기)
             # BUILD_FILE_NAMES와 SRC_FILE_NAMES를 합치고 '.md'를 제외한 리스트 생성
-            file_types = [ft for ft in BUILD_FILE_NAMES + SRC_FILE_NAMES if ft != '.md']
+            file_types = [ft for ft in BUILD_FILE_NAMES +
+                          SRC_FILE_NAMES if ft != '.md']
 
             source_db_task = asyncio.create_task(
-                add_data_to_db(f"{repo_name}_source", clone_dir, file_types)  # 소스 파일 저장
+                add_data_to_db(f"{repo_name}_source",
+                               clone_dir, file_types)  # 소스 파일 저장
             )
             tasks.append(source_db_task)
 
             # 백그라운드에서 작업과 cleanup 실행
-            background_tasks.add_task(perform_tasks_and_cleanup, tasks, (repo_dir, clone_dir, "Docs.zip"), f"{repo_name}_generated", clone_dir)
-            
+            background_tasks.add_task(perform_tasks_and_cleanup, tasks, (
+                repo_dir, clone_dir, "Docs.zip"), f"{repo_name}_generated", clone_dir)
+
             return response
 
         except Exception as e:
             attempt += 1
-            logger.error(f"문서 및 README 생성 오류 (시도 {attempt}/{MAX_RETRIES}): {str(e)}")
+            logger.error(f"문서 및 README 생성 오류 (시도 {
+                         attempt}/{MAX_RETRIES}): {str(e)}")
             if attempt >= MAX_RETRIES:
                 logger.error("최대 재시도 횟수에 도달했습니다. 작업을 중단합니다.")
             else:
                 logger.info(f"{RETRY_DELAY}초 후에 재시도합니다...")
                 await asyncio.sleep(RETRY_DELAY)  # 재시도 간격 대기
-
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail=f"문서 및 README 생성 오류: {str(e)}"
@@ -252,23 +275,46 @@ async def chat(request: ChatRequest):
                 detail="Query cannot be empty"
             )
 
-        response = codebase_chat(
-            request.query, 
-            request.repo_url, 
-            request.chat_history
-        )
-        
-        return StreamingResponse( 
-            response, 
-            media_type="text/plain"
-        )
+        # chat_history가 딕셔너리로 주어졌을 때 변환
+        if request.chat_history:
+            chat_history = []
+            for item in request.chat_history:
+                print(item)
+                chat_history.append(
+                    {"role": "user", "content": item["question"]})
+                chat_history.append(
+                    {"role": "assistant", "content": item["answer"]})
+            response = codebase_chat(
+                request.query,
+                request.repo_url,
+                chat_history,
+                request.stream
+            )
+        else:
+            response = codebase_chat(
+                request.query,
+                request.repo_url,
+                request.chat_history,
+                request.stream
+            )
+
+        if request.stream:
+            return StreamingResponse(
+                response,
+                media_type="text/plain"
+            )
+        else:
+            if isinstance(response, Generator):
+                response = ''.join(list(response))
+            return response
 
     except Exception as error:
-        logger.error(f"채팅 오류: {str(error)}")
+        logger.error(f"채팅 오류: {str(error)}", exc_info=True)
         return StreamingResponse(
             iter([f"Error: {str(error)}"]),
             media_type="text/plain"
         )
+
 
 async def test(task_name: str):
     """비동기 백그라운드 작업"""
@@ -289,8 +335,8 @@ async def generate_image(request: ImageRequest):
         description = image_processor.read_description_from_readme(s3_path)
         image_url, image_path = image_processor.generate_image(description)
 
-        return {"image_url": image_url}   
-    
+        return {"image_url": image_url}
+
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -301,6 +347,7 @@ async def generate_image(request: ImageRequest):
             os.remove(repo_path)
         if os.path.exists(image_path):
             os.remove(image_path)
+
 
 @app.post("/test")
 async def tttest():
@@ -318,10 +365,11 @@ async def tttest():
             status_code=500,
             detail=f"오류 발생: {str(e)}"
         )
-    
+
+
 @app.get("/ping")
 async def ping():
-    try :
+    try:
         return JSONResponse(status_code=200, content={"message": "pong"})
     except Exception as e:
         # 오류 발생 시 예외 처리
@@ -329,7 +377,7 @@ async def ping():
             status_code=500,
             detail=f"오류 발생: {str(e)}"
         )
-    
+
 
 if __name__ == "__main__":
     uvicorn.run(
