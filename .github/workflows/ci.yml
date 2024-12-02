@@ -13,6 +13,11 @@ jobs:
     - name: Check out code
       uses: actions/checkout@v2
 
+    # 두 변경 사항을 통합하거나 하나를 선택
+    - name: Extract commit hash
+      id: vars
+      run: echo "COMMIT_HASH=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
     - name: Create .env file from GitHub Secrets
       run: |
         echo "${{ secrets.ENV_FILE }}" > .env
@@ -25,8 +30,9 @@ jobs:
 
     - name: Docker 이미지 빌드 및 푸시
       run: |
-        docker build -t ${{ secrets.DOCKER_USERNAME }}/dododocs-ai:latest .
-        docker push ${{ secrets.DOCKER_USERNAME }}/dododocs-ai:latest
+        echo "Using commit hash: ${{ env.COMMIT_HASH }}"
+        docker build -t ${{ secrets.DOCKER_USERNAME }}/dododocs-ai:${{ env.COMMIT_HASH }} .
+        docker push ${{ secrets.DOCKER_USERNAME }}/dododocs-ai:${{ env.COMMIT_HASH }}
 
     - name: 컨테이너 실행 및 테스트
       run: |
