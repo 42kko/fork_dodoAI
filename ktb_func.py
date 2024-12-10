@@ -20,14 +20,11 @@ def check_service_annotation(java_files, include_tests=INCLUDE_TEST):
     Java 파일들을 어노테이션 타입별로 분류하여 딕셔너리로 반환
     """
     classified_files = {
-        'Service': [],
         'Controller': [],
         'Test': []
     }
-
     # 각 어노테이션별 패턴
     patterns = {
-        'Service': re.compile(r'@Service\b'),
         'Controller': re.compile(r'@(?:Controller|RestController)\b'),
         'Test': re.compile(r'@Test\b')
     }

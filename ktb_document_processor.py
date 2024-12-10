@@ -189,32 +189,35 @@ class DocumentProcessor:
             file_type=file_type
         )
 
-    async def process_readme(self, repo_url: str, clone_dir: str, user_name: str, repo_name: str, korean: bool) -> List[Any]:
+    async def process_readme(self, repo_url: str, clone_dir: str, user_name: str, repo_name: str, korean: bool, blocks: List[str]) -> List[Any]:
         """모든 문서 처리 태스크 실행"""
         tasks = []
         start_time = time.perf_counter()
         # README 생성 태스크
         readme_task = asyncio.create_task(
-            self._generate_readme(repo_url, clone_dir, korean),
+            self._generate_readme(repo_url, clone_dir, korean, blocks),
             name="readme_generation"
         )
         tasks.append(readme_task)
-
-        # Usage 생성 태스크
-        usage_task = asyncio.create_task(
-            self._generate_usage(repo_url, clone_dir, korean),
-            name="usage_generation"
-        )
-        tasks.append(usage_task)
-
+        if "START_BLOCK" in blocks:
+            # Usage 생성 태스크
+            usage_task = asyncio.create_task(
+                self._generate_usage(repo_url, clone_dir, korean),
+                name="usage_generation"
+            )
+            tasks.append(usage_task)
         # 모든 태스크 실행 및 결과 반환
         try:
             results = await asyncio.gather(*tasks, return_exceptions=True)
+            print(f"results length: {len(results)}")
             # README와 Usage 병합
-            if isinstance(results[0], str) and isinstance(results[1], str):
+            if len(results) > 1 and isinstance(results[0], str) and isinstance(results[1], str):
                 merged_content = self._update_readme_with_usage(
                     results[0], results[1])
                 await self._save_readme(merged_content, clone_dir, user_name, repo_name)
+            elif isinstance(results[0], str):
+                print("README만 있음")
+                await self._save_readme(results[0], clone_dir, user_name, repo_name)
             end_time = time.perf_counter()
             print(f"README 및 Usage 생성 완료 처리 시간: {end_time - start_time} 초")
             return results
@@ -265,8 +268,9 @@ class DocumentProcessor:
 
         return package_map
 
-    async def _generate_readme(self, repo_url: str, clone_dir: str, korean: bool) -> Optional[str]:
+    async def _generate_readme(self, repo_url: str, clone_dir: str, korean: bool, blocks: List[str]) -> Optional[str]:
         """README 생성"""
+        readme_template = generate_readme_prompt(blocks, korean)
         try:
             source_files = await self.get_optimized_source_files(clone_dir)
             if not source_files:
@@ -277,25 +281,39 @@ class DocumentProcessor:
                 optimized_context, max_tokens=GPT_MAX_TOKENS)  # 청크 크기 제한
             # 청크 단위로 처리하고 결과 병합
             if len(chunks) > 1:
-                result = await self._process_chunks(chunks, repo_url, PROMPT_README_KOREAN if korean else PROMPT_README_GEMINI, korean)
+                result = await self._process_chunks(chunks, repo_url, readme_template, korean)
             else:
-                result = await self._process_single_context(chunks[0].text, repo_url, PROMPT_README_KOREAN if korean else PROMPT_README)
+                result = await self._process_single_context(chunks[0].text, repo_url, readme_template, model=GPT_MODEL)
             return result
 
         except Exception as e:
-            logger.error(f"README generation failed: {str(e)}")
+            print(f"README generation failed: {str(e)}")
             return None
 
     def _get_build_files(self, repo_dir: str) -> List[str]:
         """빌드 파일 목록 가져오기"""
         build_files = []
+
         for root, _, files in os.walk(repo_dir):
+            # 제외할 디렉토리 체크
             if any(excl in root for excl in EXCLUDE_DIRS):
                 continue
 
+            # node_modules 디렉토리 체크
+            if "node_modules" in root:
+                continue
+
             for file in files:
-                if file.endswith(tuple(BUILD_FILE_NAMES)):
-                    build_files.append(os.path.join(root, file))
+                file_path = os.path.join(root, file)
+
+                # 일반 빌드 파일 체크
+                if file.endswith(tuple(BUILD_FILE_NAMES)) or any(name in file for name in BUILD_FILE_NAMES):
+                    # print(f"빌드 파일 발견: {file}")
+                    build_files.append(file_path)
+
+        if not build_files:
+            print(f"빌드 파일을 찾을 수 없습니다: {repo_dir}")
+
         return build_files
 
     def _build_files_context(self, build_files: List[str], clone_dir: str) -> str:
@@ -307,10 +325,11 @@ class DocumentProcessor:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     content = f.read()
                     context_parts.append(
-                        f"\n\nFILE_START: {rel_path}\n{content}\nFILE_END\n"
+                        f"FILE_PATH: {rel_path}\nFILE_CONTENT: {
+                            content}\nFILE_END\n\n"
                     )
             except Exception as e:
-                logger.error(f"파일 읽기 오류 ({rel_path}): {str(e)}")
+                print(f"파일 읽기 오류 ({rel_path}): {str(e)}")
                 continue
         return "".join(context_parts)
 
@@ -333,7 +352,7 @@ class DocumentProcessor:
             return None
 
         start_time = time.perf_counter()
-        messages = [{"role": "system", "content": PROMPT_README_FROM_SUMMARY}]
+        messages = [{"role": "system", "content": prompt}]
         for summary in chunk_summaries:
             messages.append({"role": "user", "content": summary})
         if korean:
@@ -351,18 +370,20 @@ class DocumentProcessor:
         print(f"README 생성 완료 처리 시간: {end_time - start_time} 초")
         return doc_response
 
-    async def _process_single_context(self, context: str, repo_url: str, prompt: str) -> Optional[str]:
+    async def _process_single_context(self, context: str, repo_url: str, prompt: str, model: str) -> Optional[str]:
         """단일 컨텍스트 처리"""
         messages = [
             {"role": "system", "content": prompt},
-            {"role": "user", "content": context},
-            {"role": "user", "content": f"git repo url : {repo_url}"}
+            {"role": "user", "content": context +
+                f"\n\ngit repo url : {repo_url}"},
         ]
-        doc_response, _ = self._get_completion(messages)
+        doc_response, _ = self._get_completion(messages, model=model)
         return doc_response
 
     async def _generate_usage(self, repo_url: str, clone_dir: str, korean: bool) -> Optional[str]:
         """Usage 생성"""
+        usage_template = generate_readme_prompt(
+            ["START_BLOCK"], korean)
         start_time = time.perf_counter()
         try:
             build_files = self._get_build_files(clone_dir)
@@ -375,9 +396,9 @@ class DocumentProcessor:
             if token_count > GPT_MAX_TOKENS:
                 chunks = self.text_processor.split_text(context)
                 print(f"Split into {len(chunks)} chunks - USAGE")
-                result = await self._process_chunks(chunks, repo_url, PROMPT_README_KOREAN if korean else PROMPT_USAGE, korean)
+                result = await self._process_chunks(chunks, repo_url, usage_template, korean)
             else:
-                result = await self._process_single_context(context, repo_url, PROMPT_README_KOREAN if korean else PROMPT_USAGE)
+                result = await self._process_single_context(context, repo_url, usage_template, model="gpt-4o")
 
             end_time = time.perf_counter()
             print(f"USAGE 생성 완료 처리 시간: {end_time - start_time} 초")
@@ -486,7 +507,7 @@ class DocumentProcessor:
     def _get_completion(
         self,  # self 매개변수 추가
         messages: List[Dict],
-        model: Optional[str] = MODEL,
+        model: Optional[str] = GPT_MODEL,
         temperature: Optional[float] = TEMPERATURE,
         stop: Optional[List[str]] = None,
         tools: Optional[List] = None,
@@ -513,12 +534,13 @@ class DocumentProcessor:
             #     return completion.content[0].text, None  # 텍스트만 반환
 
             # else:
-            params["model"] = GPT_MODEL
+            params["model"] = model
             params["stop"] = stop
             params["logprobs"] = logprobs
             params["top_logprobs"] = top_logprobs
             params["seed"] = SEED
-
+            print("model: ", model)
+            client_gpt = get_openai_client()
             completion = client_gpt.chat.completions.create(**params)
             return completion.choices[0].message.content, None  # 텍스트만 반환
 
@@ -527,25 +549,35 @@ class DocumentProcessor:
             return "", None
 
     def _update_readme_with_usage(self, readme_content: str, usage_content: str) -> str:
+        """README 내용에 Usage 내용을 병합합니다.
+
+        Args:
+            readme_content (str): 기존 README 내용
+            usage_content (str): Usage 섹션 내용
+
+        Returns:
+            str: 병합된 README 내용
+        """
         try:
-            # usage_content에서 Getting Started 이후 내용만 추출
-            usage_match = re.search(
-                r"## 🚀 Getting Started\n([\s\S]*$)", usage_content)
-            if usage_match:
-                usage_after_started = usage_match.group(
-                    1)  # Getting Started 이후 내용만 가져오기
+            pattern_readme = r"(## 🚀 Getting Started.*)(## 💡 Motivation)"
+            pattern_usage = r"(## 🚀 Getting Started.*)(```)"
 
-                # readme_content에서 Getting Started 이후 내용 교체
-                pattern = r"(## 🚀 Getting Started\n)([\s\S]*$)"
-                new_content = re.sub(pattern,
-                                     r"\1" + usage_after_started,
-                                     readme_content)
-                print("README가 성공적으로 업데이트 되었습니다.")
+            readme_getting_started = re.search(
+                pattern_readme, readme_content, re.DOTALL).group(1)
+            usage_getting_started = re.search(
+                pattern_usage, usage_content, re.DOTALL).group(1) + "\n\n"
 
-                return remove_markdown_blocks(new_content)
+            if not readme_getting_started or not usage_getting_started:
+                return readme_content
+
+            # Getting Started 섹션을 usage_content의 섹션으로 교체
+            new_content = readme_content.replace(
+                readme_getting_started, usage_getting_started)
+
+            return new_content
+
         except Exception as e:
-            print(f"오류 발생: {e}")
-        return readme_content  # 실패 시 원본 환
+            return readme_content
 
     async def _save_readme(self, content: str, clone_dir: str, user_name: str, repo_name: str):
         """README 파일 저장"""
@@ -599,24 +631,15 @@ class DocumentProcessor:
         try:
             io_pool = ThreadPoolExecutor(
                 max_workers=multiprocessing.cpu_count() * 2)
-
-            # 카테고리별 프롬프트 정의
-            if korean:
-                prompts = {
-                    'Controller': NEW_PROMPT_ARCHITECTURE_DOC,
-                    'Test': NEW_PROMPT_TEST_DOC
-                }
-            else:
-                prompts = {
-                    'Service': NEW_PROMPT_SERVICE_DOC,
-                    'Controller': NEW_PROMPT_CONTROLLER_DOC,
-                    'Test': NEW_PROMPT_TEST_DOC
-                }
-
+            # 한국어/영어에 따른 프롬프트 정의
+            prompts = {
+                'Controller': NEW_PROMPT_ARCHITECTURE_DOC_KOREAN if korean else NEW_PROMPT_ARCHITECTURE_DOC,
+                'Test': NEW_PROMPT_TEST_DOC_KOREAN if korean else NEW_PROMPT_TEST_DOC
+            }
             all_tasks = []
             for category, files in directory_path.items():
-                # Service 카테고리를 건너뛰기
-                if korean and category == 'Service':
+                # Controller와 Test 카테고리만 처리
+                if category not in prompts:
                     continue
 
                 code_contents = self._get_code_contents(files)
@@ -655,7 +678,6 @@ class DocumentProcessor:
     def categorize_files(self, directory):
         """각 카테고리 폴더(Service, Controller, Test) 내의 파일들을 분류"""
         categories = {
-            "Service": [],
             "Controller": [],  # Controller와 RestController를 함께 처리,
             "Test": []
         }
@@ -672,7 +694,7 @@ class DocumentProcessor:
 
     async def summarize_docs_async(self, directory, korean: bool):
         category_files = self.categorize_files(directory)
-        summaries = {"Service": {}, "Controller": {}, "Test": {}}
+        summaries = {"Controller": {}, "Test": {}}
 
         with ThreadPoolExecutor() as executor:
             loop = asyncio.get_event_loop()
@@ -756,33 +778,6 @@ class DocumentProcessor:
         except Exception as e:
             print(f"Error processing tasks: {e}")
             return {}
-
-    async def process_chunk(self, chunk: str, repo_url: str, prompt: str) -> Optional[str]:
-        """단일 청크 처리"""
-        try:
-            start_time = time.perf_counter()
-            model = genai.GenerativeModel(
-                model_name=MODEL,
-                system_instruction=prompt,
-            )
-            chat = model.start_chat(
-                history=[
-                    {"role": "user", "parts": prompt}
-                ]
-            )
-
-            # 비동기적으로 메시지 전송
-            response = await asyncio.to_thread(
-                chat.send_message,
-                f"git repository url : {repo_url}\n\n" + chunk
-            )
-            end_time = time.perf_counter()
-            print(f"### 파트 요약 완료 처리 시간: {end_time - start_time} 초")
-            return response.text
-
-        except Exception as e:
-            print(f"청크 처리 중 오류: {str(e)}")
-            return None
 
     def read_file_content(self, file_path):
         with open(file_path, 'r') as file:

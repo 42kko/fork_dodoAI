@@ -18,7 +18,8 @@ from ktb_func import *
 
 
 origins = [
-    "http://localhost:8080"
+    "http://localhost:8080",
+    "http://localhost:3000"
 ]
 
 # 로깅 설정
@@ -47,6 +48,17 @@ class DocRequest(BaseModel):
     s3_path: str
     include_test: bool = False
     korean: bool = False
+    blocks: List[str] = [
+        "OVERVIEW_BLOCK",
+        "STRUCTURE_BLOCK",
+        "START_BLOCK",
+        "MOTIVATION_BLOCK",
+        "DEMO_BLOCK",
+        "DEPLOYMENT_BLOCK",
+        "CONTRIBUTORS_BLOCK",
+        "FAQ_BLOCK",
+        "PERFORMANCE_BLOCK"
+    ]
 
 
 class ChatRequest(BaseModel):
@@ -130,7 +142,7 @@ async def process_docs(directory_path: dict[str, list], output_directory: str, u
         return False  # 예외 발생 시 False 반환
 
 
-async def perform_full_generation(repo_url, clone_dir, repo_name, user_name, include_test, korean):
+async def perform_full_generation(repo_url, clone_dir, repo_name, user_name, include_test, korean, blocks):
     """문서 및 README 생성 작업을 백그라운드에서 수행"""
     try:
         start_time = time.perf_counter()
@@ -142,7 +154,7 @@ async def perform_full_generation(repo_url, clone_dir, repo_name, user_name, inc
 
         tasks = []
         readme_task = asyncio.create_task(doc_processor.process_readme(
-            repo_url, clone_dir, user_name, repo_name, korean))
+            repo_url, clone_dir, user_name, repo_name, korean, blocks))
         tasks.append(readme_task)
         # java_categories가 있는 경우 문서 생성 태스크 추가
         doc_dir = os.path.join(clone_dir, "dododocs")
@@ -168,13 +180,13 @@ async def perform_full_generation(repo_url, clone_dir, repo_name, user_name, inc
         logger.error(f"문서 및 README 생성 오류")
 
 
-async def perform_readme_only_generation(repo_url, clone_dir, repo_name, user_name, korean):
+async def perform_readme_only_generation(repo_url, clone_dir, repo_name, user_name, korean, blocks):
     """README 생성 작업만 백그라운드에서 수행"""
+    print(f"korean: {korean}")
     try:
         start_time = time.perf_counter()
-
         # README 생성
-        readme = await doc_processor.process_readme(repo_url, clone_dir, user_name, repo_name, korean)
+        readme = await doc_processor.process_readme(repo_url, clone_dir, user_name, repo_name, korean, blocks)
         if not readme:
             logger.error("README 생성 실패")
             raise Exception("README 생성 실패")
@@ -194,7 +206,7 @@ async def perform_tasks_and_cleanup(tasks, cleanup_args, db_name, clone_dir):
     # generated_files_dir = os.path.join(clone_dir, "dododocs")  # 생성된 파일이 저장된 디렉토리
     # await add_data_to_db(db_name, clone_dir, [".md"])  # 생성된 파일 저장
     print(f"add_data_to_db 완료: {db_name}, {clone_dir}")
-    await async_cleanup(*cleanup_args)  # cleanup 실행
+    # await async_cleanup(*cleanup_args)  # cleanup 실행
 
 
 @app.post("/generate")
@@ -221,28 +233,76 @@ async def generate(request: DocRequest, background_tasks: BackgroundTasks):
             if has_java_files:
                 tasks.append(asyncio.create_task(
                     perform_full_generation(
-                        request.repo_url, clone_dir, repo_name, user_name, request.include_test, request.korean)
+                        request.repo_url, clone_dir, repo_name, user_name, request.include_test, request.korean, request.blocks)
                 ))
                 response = {"readme_s3_key": readme_s3_key,
                             "docs_s3_key": docs_s3_key}
             else:
                 tasks.append(asyncio.create_task(
                     perform_readme_only_generation(
-                        repo_dir, clone_dir, repo_name, user_name, request.korean)
+                        repo_dir, clone_dir, repo_name, user_name, request.korean, request.blocks)
                 ))
                 response = {"readme_s3_key": readme_s3_key,
                             "docs_s3_key": None}
 
             # 소스 파일들을 DB에 저장하는 작업 추가 (비동기)
             # BUILD_FILE_NAMES와 SRC_FILE_NAMES를 합치고 '.md'를 제외한 리스트 생성
-            file_types = [ft for ft in BUILD_FILE_NAMES +
-                          SRC_FILE_NAMES if ft != '.md']
-
+            file_types = [ft for ft in SRC_FILE_NAMES if ft != '.md']
+            print(f"total files : {len(file_types)}")
             source_db_task = asyncio.create_task(
                 add_data_to_db(f"{repo_name}_source",
                                clone_dir, file_types)  # 소스 파일 저장
             )
             tasks.append(source_db_task)
+
+            # 백그라운드에서 작업과 cleanup 실행
+            background_tasks.add_task(perform_tasks_and_cleanup, tasks, (
+                repo_dir, clone_dir, "Docs.zip"), f"{repo_name}_generated", clone_dir)
+
+            return response
+
+        except Exception as e:
+            attempt += 1
+            logger.error(f"문서 및 README 생성 오류 (시도 {
+                         attempt}/{MAX_RETRIES}): {str(e)}")
+            if attempt >= MAX_RETRIES:
+                logger.error("최대 재시도 횟수에 도달했습니다. 작업을 중단합니다.")
+            else:
+                logger.info(f"{RETRY_DELAY}초 후에 재시도합니다...")
+                await asyncio.sleep(RETRY_DELAY)  # 재시도 간격 대기
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail=f"문서 및 README 생성 오류: {str(e)}"
+    )
+
+
+@app.post("/generate_develop")
+async def generate_develop(request: DocRequest, background_tasks: BackgroundTasks):
+    """문서 및 README 생성 엔드포인트"""
+    attempt = 0
+    while attempt < MAX_RETRIES:
+        try:
+            # 1. Git 저장소 준비
+            repo_dir, clone_dir, repo_name, user_name = await prepare_repository(
+                request.repo_url,
+                request.s3_path
+            )
+            # Java 파일 존재 여부 확인
+            java_files_path = file_utils.find_files(clone_dir, (".java",))
+            has_java_files = len(java_files_path) > 0
+            print(f"has_java_files: {has_java_files}")
+            # S3 키 생성
+            readme_s3_key = f"{user_name}_{repo_name}_README.md"
+            docs_s3_key = f"{user_name}_{repo_name}_DOCS.zip"
+
+            # 백그라운드 작업 생성
+            tasks = []
+            tasks.append(asyncio.create_task(
+                perform_readme_only_generation(
+                    request.repo_url, clone_dir, repo_name, user_name, request.korean, request.blocks)
+            ))
+            response = {"readme_s3_key": readme_s3_key,
+                        "docs_s3_key": None}
 
             # 백그라운드에서 작업과 cleanup 실행
             background_tasks.add_task(perform_tasks_and_cleanup, tasks, (

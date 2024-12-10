@@ -15,11 +15,11 @@ import uuid
 from PIL import Image
 
 
-
-from ktb_settings import client_gpt
+from ktb_settings import get_openai_client
 from ktb_prompts import DALLE_PROMPT
 
 logger = logging.getLogger(__name__)
+
 
 class FileUtils:
     """파일 처리 관련 유틸리티"""
@@ -28,14 +28,15 @@ class FileUtils:
         """지정된 확장자를 가진 파일들을 찾음"""
         files = []
         for root, _, filenames in os.walk(directory):
-            #if any(excl in root for excl in EXCLUDE_DIRS):
+            # if any(excl in root for excl in EXCLUDE_DIRS):
             #    continue
             files.extend(
-                os.path.join(root, f) 
-                for f in filenames 
+                os.path.join(root, f)
+                for f in filenames
                 if f.endswith(extensions)
             )
         return files
+
 
 class TextProcessor:
     """텍스트 처리 관련 유틸리티"""
@@ -52,32 +53,12 @@ class TextProcessor:
     def split_text(text: str, max_tokens: int = GPT_MAX_TOKENS) -> List[str]:
         return chunker.chunk(text)
 
-class AsyncFileIO:
-    """비동기 파일 입출력 처리"""
-    def __init__(self):
-        self.io_pool = ThreadPoolExecutor(
-            max_workers=multiprocessing.cpu_count() * 2
-        )
-
-    async def save_file(self, path: str, content: str):
-        """비동기로 파일 저장"""
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            self.io_pool,
-            lambda: open(path, "w", encoding="utf-8").write(content)
-        )
-
-    async def read_file(self, path: str) -> str:
-        """비동기로 파일 읽기"""
-        async with aiofiles.open(path, "r", encoding="utf-8") as f:
-            return await f.read() 
 
 class ImageProcessor:
     """이미지 생성 및 README 업데이트 관련 유틸리티"""
 
     def __init__(self):
-        self.client_gpt = client_gpt
+        self.client_gpt = get_openai_client()
         self.dalle_prompt = DALLE_PROMPT
 
     def read_description_from_readme(self, file_path="README.md"):
@@ -86,15 +67,17 @@ class ImageProcessor:
             with open(file_path, "r", encoding="utf-8") as file:
                 content = file.read()
                 # Description 섹션을 정규 표현식으로 추출
-                description_match = re.search(r"Overview\n(.*?)(### Main Purpose)", content, re.S)
+                description_match = re.search(
+                    r"Overview\n(.*?)(### Main Purpose)", content, re.S)
 
                 if description_match:
                     return description_match.group(1).strip()
                 else:
-                    raise ValueError("Could not find 'Overview' or 'Main Purpose' sections in the README.md")
+                    raise ValueError(
+                        "Could not find 'Overview' or 'Main Purpose' sections in the README.md")
         except FileNotFoundError:
             raise FileNotFoundError(f"File '{file_path}' does not exist.")
-        
+
     async def download_image(self, url: str) -> bytes:
         """비동기적으로 이미지를 다운로드"""
         async with aiohttp.ClientSession() as session:
@@ -130,7 +113,8 @@ class ImageProcessor:
             # 'Preview' 섹션 뒤에 이미지를 삽입
             new_content = re.sub(
                 r"(Preview\n)(.*?)(##|$)",
-                f"Preview\n\n<img src='{image_path}' width='400' height='400'/>\n\n\\3",
+                f"Preview\n\n<img src='{
+                    image_path}' width='400' height='400'/>\n\n\\3",
                 content, flags=re.S
             )
 

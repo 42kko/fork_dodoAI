@@ -34,7 +34,7 @@ load_dotenv()
 # 모델 설정
 MODEL = 'gemini-1.5-flash'
 GPT_MODEL = 'gpt-4o-mini'
-TEMPERATURE = 0.1
+TEMPERATURE = 0.17
 SEED = 213
 TOP_LOGPROBS = 5  # logprob token 개수
 
@@ -57,9 +57,25 @@ embedding_chunker = TokenChunker(
     chunk_size=8191,  # maximum tokens per chunk
     chunk_overlap=2000  # overlap between chunks
 )
-EMBEDDING_MODEL = "text-embedding-ada-002"
-EMBEDDING_DIM = 1536
-DISTANCE = {"hnsw:space": "cosine"}
+embedding_model_name = os.getenv(
+    'EMBEDDING_MODEL_NAME', 'text-embedding-3-small')
+# 임베딩 모델과 차원 설정
+if embedding_model_name == "text-embedding-3-small":
+    EMBEDDING_MODEL = "text-embedding-3-small"
+    EMBEDDING_DIM = 1536
+elif embedding_model_name == "text-embedding-3-large":
+    EMBEDDING_MODEL = "text-embedding-3-large"
+    EMBEDDING_DIM = 3072
+
+DISTANCE_TYPE = "inner_product"
+
+if DISTANCE_TYPE == "cosine":
+    DISTANCE = {"hnsw:space": "cosine"}
+elif DISTANCE_TYPE == "inner_product":
+    DISTANCE = {"hnsw:space": "ip"}
+else:
+    DISTANCE = {"hnsw:space": "l2"}
+
 GPT_MAX_TOKENS = 120000
 headers_to_split_on = [
     (
@@ -104,12 +120,14 @@ EXCLUDE_DIRS = ['.git', 'node_modules', 'venv', '__pycache__', 'dist', 'tests',
 BUILD_FILE_NAMES = [
     'Makefile', 'CMakeLists.txt', 'setup.py', 'main.py', 'pyproject.toml',
     'config.js', 'go.mod', 'Cargo.toml', 'Gemfile', 'pom.xml', 'package.json',
-    '.env', 'Dockerfile', 'gradle', 'requirements.txt', 'build',
+    '.env', 'Dockerfile', 'requirements.txt', 'build',
     'setup.cfg', 'requirements-dev.txt', 'tox.ini', 'configure.ac', 'config.h.in',
     '.csproj', '.sln', 'tsconfig.json', 'webpack.config.js', 'gulpfile.js',
     'rollup.config.js', 'build.gradle', 'settings.gradle', 'Jenkinsfile',
-    'Vagrantfile', 'Procfile', 'Brewfile', '.md'
+    'Vagrantfile', 'Procfile', 'Brewfile', '.md', 'Dockerfile', 'docker-compose.yml', 'Makefile',
+    'CMakeLists.txt', '.env', 'main.py', 'poetry.lock'
 ]
+
 SRC_FILE_NAMES = ['.py', '.js', '.ts', '.java', '.cpp',
                   '.h', '.hpp', '.cs', '.go', '.rs', '.rb', '.php']
 
@@ -117,7 +135,11 @@ MAX_RETRIES = 2  # 최대 재시도 횟수
 RETRY_DELAY = 3  # 재시도 간격 (초)
 INCLUDE_TEST = False
 
-client_gpt = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+
+def get_openai_client():
+    return OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+
+
 client_gemini = OpenAI(
     api_key=os.getenv('GEMINI_API_KEY'),
     base_url="https://generativelanguage.googleapis.com/v1beta/"
