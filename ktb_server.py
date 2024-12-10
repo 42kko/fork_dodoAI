@@ -339,7 +339,6 @@ async def chat(request: ChatRequest):
         if request.chat_history:
             chat_history = []
             for item in request.chat_history:
-                print(item)
                 chat_history.append(
                     {"role": "user", "content": item["question"]})
                 chat_history.append(
@@ -364,16 +363,11 @@ async def chat(request: ChatRequest):
                 media_type="text/plain"
             )
         else:
-            if isinstance(response, Generator):
-                response = ''.join(list(response))
-            return response
+            return {"answer": response}
 
     except Exception as error:
         logger.error(f"채팅 오류: {str(error)}", exc_info=True)
-        return StreamingResponse(
-            iter([f"Error: {str(error)}"]),
-            media_type="text/plain"
-        )
+        return {"answer": f"Error: {str(error)}"}
 
 
 async def test(task_name: str):

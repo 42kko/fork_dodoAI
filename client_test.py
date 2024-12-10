@@ -1,6 +1,6 @@
 import requests
 import logging
-from typing import Iterator, Optional, List, Dict, Any
+from typing import Iterator, Optional, List, Dict, Any, Union
 import pprint
 import asyncio
 import os
@@ -47,7 +47,7 @@ class ChatClient:
             logger.error(f"문서 및 README 생성 API 요청 실패: {str(e)}")
             raise
 
-    def chat(self, repo_name: str, query: str, chat_history: Optional[List[Dict[str, Any]]] = None, stream: bool = False) -> Iterator[str]:
+    def chat(self, repo_name: str, query: str, chat_history: Optional[List[Dict[str, Any]]] = None, stream: bool = False) -> Union[str, Iterator[str]]:
         """채팅 API 요청"""
         try:
             url = f"{self.base_url}/chat"
@@ -57,12 +57,15 @@ class ChatClient:
                 "chat_history": chat_history or [],
                 "stream": stream
             }
-            with requests.post(url, json=payload, stream=stream) as response:
-                response.raise_for_status()
-                if stream:
-                    yield from self._stream_response(response)
-                else:
-                    yield response.text
+
+            response = requests.post(url, json=payload, stream=stream)
+            response.raise_for_status()
+
+            if stream:
+                return self._stream_response(response)
+            else:
+                # JSON 응답에서 answer 필드 추출
+                return response.json()["answer"]
 
         except requests.RequestException as e:
             logger.error(f"채팅 API 요청 실패: {str(e)}")
@@ -86,57 +89,24 @@ async def main():
     # s3_path = "spring-boot-main.zip"
     # s3_path = "msung99-Gatsby-Starter-Haon"
     s3_path = "moheng-develop.zip"
-    # blocks = ["PREVIEW_BLOCK", "OVERVIEW_BLOCK", "STRUCTURE_BLOCK"]
 
-    try:
-        # 문서 및 README 생성 테스트
-        # print("\n문서 및 README 생성 테스트:")
-        # generate_response = client.generate(
-        #     repo_url=repo_url, s3_path=s3_path, korean=False, include_test=False)
-        # pprint.pprint(generate_response)
+    # 첫 번째 질문
+    query = "describe AuthController and its response/endpoint"
+    print(f"\n질문: {query}\n")
+    print("응답:")
 
-        # 첫 번째 질문
-        query = "describe AuthController and its response/endpoint"
-        print(f"\n질문: {query}\n")
-        print("응답:")
-        full_response = ''
+    # 응답 처리
+    response = client.chat(repo_name=repo_url, query=query, stream=False)
+    print(response)
 
-        # 스트리밍 응답 처리
-        for response_chunk in client.chat(repo_name=repo_url, query=query):
-            print(response_chunk, end='', flush=True)
-            full_response += response_chunk
-
-        # query2 = "씨팔 모르겠고 404에러나 고쳐줘. 어디부터 고쳐야됨?"
-        query2 = "한국어로 다시 응답해줘"
-        # 두 번째 질문: 이전 응답을 한국어로 번역 요청
-        print(f"\n\n질문: {query2}\n")
-        print("응답:")
-        chat_history = [
-            {
-                "question": query, "answer": full_response
-            }
-        ]
-        full_response2 = ''
-        # 번역 요청 스트리밍 처리
-        for response_chunk in client.chat(repo_name=repo_url, query=query2, chat_history=chat_history):
-            print(response_chunk, end='', flush=True)
-            full_response2 += response_chunk
-        chat_history.extend([
-            {"question": query2, "answer": full_response2}
-        ])
-        # query3 = "API usage and troubleshooting Error 404 for Kakao OAuth and Spring Boot backend, access token, endpoint verification, RestAssured examples, HTTP method checks, server logs."
-        query3 = "KakaoOAuthClient에서 404 에러 해결 방법에 대해 설명해줘."
-        print(f"\n\n질문: {query3}\n")
-        print("응답:")
-        chat_history.extend([
-            {"question": query3, "answer": full_response2}
-        ])
-
-        for response_chunk in client.chat(repo_name=repo_url, query=query3, chat_history=chat_history):
-            print(response_chunk, end='', flush=True)
-
-    except Exception as e:
-        logger.error(f"테스트 실패: {str(e)}")
+    # 채팅 기록 예시
+    chat_history = [
+        {
+            "question": query,
+            "answer": response
+        }
+    ]
+    # 추가 질문 처리...
 
 if __name__ == "__main__":
     asyncio.run(main())

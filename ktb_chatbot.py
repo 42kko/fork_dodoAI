@@ -3,7 +3,7 @@ from ktb_settings import *
 from ktb_func import *
 
 import os
-from typing import List, Dict, Optional, Any, Generator
+from typing import List, Dict, Optional, Any, Generator, Union
 from pathlib import Path
 import logging
 import tiktoken
@@ -161,18 +161,8 @@ def db_search(query: str, db: Any, n_results: int = 3) -> Dict[str, Any]:
         raise
 
 
-def generate_response(query: str, db_list: List[Any], chat_history: Optional[List[dict]] = None, augmented_query: Optional[str] = None, stream: bool = False) -> Any:
-    """model: Optional[str] = MODEL,
-    Generate a response using LLM based on retrieved documents.
-
-    Args:
-        query (str): User query
-        db_list: List[ChromaDB collection]
-        augmented_query: Optional[str] = None
-
-    Returns:
-        str or Generator: Generated response
-    """
+def generate_response(query: str, db_list: List[Any], chat_history: Optional[List[dict]] = None, augmented_query: Optional[str] = None, stream: bool = False) -> str:
+    """Generate a response using LLM based on retrieved documents."""
     try:
         if augmented_query:
             retrieved_docs_source = db_search(augmented_query, db_list[0])
@@ -180,9 +170,8 @@ def generate_response(query: str, db_list: List[Any], chat_history: Optional[Lis
         else:
             retrieved_docs_source = db_search(query, db_list[0])
             retrieved_docs_generated = db_search(query, db_list[1])
-        # Construct query
-        system_prompt = CHATBOT_PROMPT
 
+        system_prompt = CHATBOT_PROMPT
         user_prompt = f"""
 Retrieved Content:
 {retrieved_docs_source['documents']}
@@ -191,29 +180,64 @@ Retrieved Content:
 
 User Query / Instruct: {query}
 """
-        # print(user_prompt)
         full_prompt = [{"role": "system", "content": system_prompt}]
         if chat_history:
-            # Include previous conversation history
             full_prompt.extend(chat_history)
         full_prompt.append({"role": "user", "content": user_prompt})
-        # Generate response using OpenAI
+
         client_gpt = get_openai_client()
         response = client_gpt.chat.completions.create(
             model=GPT_MODEL,
             messages=full_prompt,
             temperature=0.52,
-            stream=stream
+            stream=False  # 항상 스트리밍 비활성화
         )
-        if stream:
-            for chunk in response:
-                if chunk.choices[0].delta.content is not None:
-                    yield chunk.choices[0].delta.content
-        else:
-            yield response.choices[0].message.content
+
+        return response.choices[0].message.content
 
     except Exception as e:
-        print(f"Error generating response: {str(e)}")
+        logger.error(f"Error generating response: {str(e)}")
+        raise
+
+
+def stream_response(query: str, db_list: List[Any], chat_history: Optional[List[dict]] = None, augmented_query: Optional[str] = None) -> Generator:
+    """Generate a streaming response."""
+    try:
+        if augmented_query:
+            retrieved_docs_source = db_search(augmented_query, db_list[0])
+            retrieved_docs_generated = db_search(augmented_query, db_list[1])
+        else:
+            retrieved_docs_source = db_search(query, db_list[0])
+            retrieved_docs_generated = db_search(query, db_list[1])
+
+        system_prompt = CHATBOT_PROMPT
+        user_prompt = f"""
+Retrieved Content:
+{retrieved_docs_source['documents']}
+
+{retrieved_docs_generated['documents']}
+
+User Query / Instruct: {query}
+"""
+        full_prompt = [{"role": "system", "content": system_prompt}]
+        if chat_history:
+            full_prompt.extend(chat_history)
+        full_prompt.append({"role": "user", "content": user_prompt})
+
+        client_gpt = get_openai_client()
+        response = client_gpt.chat.completions.create(
+            model=GPT_MODEL,
+            messages=full_prompt,
+            temperature=0.52,
+            stream=True  # 항상 스트리밍 활성화
+        )
+
+        for chunk in response:
+            if chunk.choices[0].delta.content is not None:
+                yield chunk.choices[0].delta.content
+
+    except Exception as e:
+        logger.error(f"Error generating streaming response: {str(e)}")
         raise
 
 
@@ -234,10 +258,10 @@ def evaluate_response(response: str) -> bool:
     return True
 
 
-def codebase_chat(query: str, repo_url: str, chat_history: List[dict] = None, stream: bool = False) -> Generator[Any, Any, Any]:
-    repo_name, _ = parse_repo_url(repo_url)
+def codebase_chat(query: str, repo_url: str, chat_history: List[dict] = None, stream: bool = False) -> Union[str, Generator]:
+    """채팅 응답 생성"""
     try:
-        # Validate repository exists
+        repo_name, _ = parse_repo_url(repo_url)
         vector_store_source = chroma_client.get_collection(
             name=f"{repo_name}_source",
             embedding_function=embedding_function
@@ -249,21 +273,20 @@ def codebase_chat(query: str, repo_url: str, chat_history: List[dict] = None, st
         db_list = [vector_store_source, vector_store_generated]
 
         if chat_history:
-            print("chatbot history", chat_history)
-            # 모든 메시지를 고려하여 토큰 수 계산
             total_content = ''.join([msg['content']
                                     for msg in chat_history]) + query
             total_tokens = len(tiktoken.encoding_for_model(
                 GPT_MODEL).encode(total_content))
-            if total_tokens > MAX_TOKEN_LENGTH:
-                last_message = chat_history[-1]
-            else:
-                last_message = chat_history
+            last_message = chat_history[-1] if total_tokens > MAX_TOKEN_LENGTH else chat_history
         else:
             last_message = None
-        # Generate initial response
+
         augmented_query = query_augmentation(query, last_message)
-        return generate_response(query, db_list, last_message, augmented_query, stream)
+
+        if stream:
+            return stream_response(query, db_list, last_message, augmented_query)
+        else:
+            return generate_response(query, db_list, last_message, augmented_query, stream)
 
     except Exception as e:
         logger.error(f"Error in codebase chat: {str(e)}")
