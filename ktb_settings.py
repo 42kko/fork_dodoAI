@@ -44,7 +44,6 @@ if MODEL.startswith('gpt' or 'claude'):
 elif MODEL.startswith('gemini'):
     MAX_TOKENS_PER_BATCH = 3500000
     MAX_TOKEN_LENGTH = 1000000
-    genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
 
 tokenizer = AutoTikTokenizer.from_pretrained("gpt2")
 chunker = TokenChunker(
@@ -138,6 +137,14 @@ INCLUDE_TEST = False
 
 def get_openai_client():
     return OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+
+
+def get_gemini_client(prompt: str):
+    genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
+    return genai.GenerativeModel(
+        model_name=MODEL,
+        system_instruction=prompt,
+    )
 
 
 client_gemini = OpenAI(

@@ -12,12 +12,6 @@ SUMMARY_PROMPT = """Please provide a concise summary of the provided documentati
 - Key implementation patterns
 - Critical flows and processes
 
-3. Technical Considerations
-- Error handling strategies
-- Common patterns and conventions
-- Performance considerations
-- Testing approaches
-
 Please keep the summary clear and organized with bullet points where appropriate. Focus on high-level architectural patterns and main concepts without implementation details.
 
 Note: Examples of generated summaries will look like:
@@ -41,19 +35,59 @@ For Tests:
 - Key test scenarios
 """
 
-CHATBOT_PROMPT = """You are a helpful assistant.
+# CHATBOT_PROMPT = """You are a helpful assistant.
 
-When answering:
-1. Only use information from the provided context and chat history
-2. If the context is relevant but insufficient to fully answer the query, use information from the chat history
-3. If you're unsure about the relevance of the context, explain why
-4. Never make up information that's not in the context
+# When answering:
+# 1. Only use information from the provided context and chat history
+# 2. If the context is relevant but insufficient to fully answer the query, use information from the chat history
+# 3. If you're unsure about the relevance of the context, explain why
+# 4. Never make up information that's not in the context
 
-Remember to:
-- User Intruction is more important than context
-- Be concise and direct
-- Cite specific parts of the context when relevant
-- Maintain a helpful and professional tone"""
+# Remember to:
+# - User Intruction is more important than context
+# - Be concise and direct
+# - Cite specific parts of the context when relevant
+# - Use the code provided to provide a code-included answer
+# - Maintain a helpful and professional tone"""
+
+CHATBOT_PROMPT = """You are a precise code-based QA assistant with context-driven response generation.
+
+Language Response Rule:
+- ALWAYS respond in the EXACT SAME LANGUAGE as the user's query
+- Maintain full technical precision while using the user's language
+
+Code Reference Guidelines:
+- MANDATORY: Include actual code implementations for key concepts discussed
+- When explaining a concept, directly attach:
+ 1. The exact code snippet that implements the concept
+ 2. Full file path and location of the code
+ 3. Relevant line numbers or code block markers
+- If multiple code implementations exist, prioritize the most relevant or detailed one
+
+Context Processing Rules:
+- Mandatory Reference: Always cite the specific file(s) and location(s) from which information is sourced
+- Source Transparency: Include full file path/name when referencing context
+- Code Citation: When discussing code, directly quote or reference exact code snippets from the provided context
+- NEVER generate arbitrary code not present in the context
+
+Response Structure:
+1. Conceptual Explanation
+2. Code Implementation Reference
+  - File Name
+  - Full File Path
+  - Exact Code Snippet
+  - Explanation of Code's Relevance
+
+Additional Guidelines:
+- Prioritize showing actual implementation over abstract explanations
+- Ensure code snippets directly illustrate the discussed concept
+- Provide context for why this specific code is relevant
+
+Strict Compliance:
+- Zero tolerance for information fabrication
+- Complete traceability of information sources
+- Transparent about context limitations
+- Always prefer showing actual code over theoretical descriptions"""
 
 DALLE_PROMPT = '''
 Draw the core features clearly. 
@@ -72,12 +106,6 @@ SUMMARY_PROMPT_KOREAN = """Please provide a concise summary of the provided docu
 - Component interactions and dependencies
 - Key implementation patterns
 - Critical flows and processes
-
-3. Technical Considerations
-- Error handling strategies
-- Common patterns and conventions
-- Performance considerations
-- Testing approaches
 
 Please keep the summary clear and organized with bullet points where appropriate. Focus on high-level architectural patterns and main concepts without implementation details.
 
@@ -617,7 +645,11 @@ def generate_readme_prompt(blocks, korean=False):
 {readme_template}
 """
     if korean:
-        template += "\nMUST reponse all readme and annotations in Korean. except for the code and Project Name."
+        template += "Do not generate other contents. MUST fill only the sections that are provided.\nMUST reponse all readme and annotations in Korean. except for the code and Project Name."
     else:
-        template += "\nMUST reponse all readme and annotations in English."
+        template += "Do not generate other contents. MUST fill only the sections that are provided.\nMUST reponse all readme and annotations in English. except for the code and Project Name."
     return template
+
+
+print(generate_readme_prompt(['OVERVIEW_BLOCK', 'STRUCTURE_BLOCK', 'START_BLOCK', 'MOTIVATION_BLOCK',
+      'DEMO_BLOCK', 'DEPLOYMENT_BLOCK', 'CONTRIBUTORS_BLOCK', 'FAQ_BLOCK', 'PERFORMANCE_BLOCK'], korean=True))

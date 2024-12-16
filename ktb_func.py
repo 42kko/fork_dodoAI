@@ -1,5 +1,4 @@
 from ktb_settings import *
-from ktb_func import *
 
 import re
 import os
@@ -7,7 +6,6 @@ from urllib.parse import urlparse
 import zipfile
 import logging
 import shutil
-import boto3
 import asyncio
 
 

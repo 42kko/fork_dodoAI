@@ -9,9 +9,9 @@ uvicorn
 pydantic
 aiofiles
 tiktoken
-pillow
 requests
 python-dotenv
 google-generativeai
 chonkie
+aws-lambda-powertools
 autotiktokenizer

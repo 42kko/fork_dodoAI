@@ -4,6 +4,7 @@ from typing import Iterator, Optional, List, Dict, Any, Union
 import pprint
 import asyncio
 import os
+import time
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -26,7 +27,7 @@ class ChatClient:
     def generate(self, repo_url: str, s3_path: str, include_test: bool = False, korean: bool = False) -> Dict[str, Any]:
         """문서 및 README 생성 API 요청"""
         try:
-            url = f"{self.base_url}/generate"
+            url = f"{self.base_url}/generate_develop"
             payload = {
                 "repo_url": repo_url,
                 "s3_path": s3_path,
@@ -89,24 +90,38 @@ async def main():
     # s3_path = "spring-boot-main.zip"
     # s3_path = "msung99-Gatsby-Starter-Haon"
     s3_path = "moheng-develop.zip"
+    include_test = False
+    korean = True
+    client.generate(repo_url, s3_path, include_test, korean)
 
-    # 첫 번째 질문
-    query = "describe AuthController and its response/endpoint"
-    print(f"\n질문: {query}\n")
-    print("응답:")
+    # # 첫 번째 질문
+    # query = "describe AuthController and its response/endpoint"
+    # print(f"\n질문: {query}\n")
+    # print("응답:")
 
-    # 응답 처리
-    response = client.chat(repo_name=repo_url, query=query, stream=False)
-    print(response)
+    # # 응답 처리
+    # response = client.chat(repo_name=repo_url, query=query, stream=False)
+    # print(response)
 
-    # 채팅 기록 예시
-    chat_history = [
-        {
-            "question": query,
-            "answer": response
-        }
-    ]
-    # 추가 질문 처리...
+    # # 채팅 기록 예시
+    # chat_history = [
+    #     {
+    #         "question": query,
+    #         "answer": response
+    #     }
+    # ]
+
+    # query2 = "AuthController에서 404 에러가 발생하는 원인을 설명해줘. 그리고 해결 방법을 알려줘."
+    # print(f"\n질문: {query2}\n")
+    # print("응답:")
+
+    # # 응답 처리
+    # start_time = time.perf_counter()
+    # response2 = client.chat(repo_name=repo_url, query=query2,
+    #                         stream=False, chat_history=chat_history)
+    # end_time = time.perf_counter()
+    # print(response2)
+    # print(f"소요 시간: {end_time - start_time}초")
 
 if __name__ == "__main__":
     asyncio.run(main())

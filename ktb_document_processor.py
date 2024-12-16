@@ -603,10 +603,8 @@ class DocumentProcessor:
         """단일 청크 처리"""
         try:
             start_time = time.perf_counter()
-            model = genai.GenerativeModel(
-                model_name=MODEL,
-                system_instruction=prompt,
-            )
+
+            model = get_gemini_client(prompt)
             chat = model.start_chat(
                 history=[
                     {"role": "user", "parts": prompt}
@@ -694,7 +692,7 @@ class DocumentProcessor:
 
     async def summarize_docs_async(self, directory, korean: bool):
         category_files = self.categorize_files(directory)
-        summaries = {"Controller": {}, "Test": {}}
+        summaries = {"Controller": {}}
 
         with ThreadPoolExecutor() as executor:
             loop = asyncio.get_event_loop()
