@@ -57,7 +57,7 @@ async def process_file(file_path: Path, vector_store, file_metadata, chunk_id_co
                     if len(tiktoken.encoding_for_model(EMBEDDING_MODEL).encode(doc)) <= 8191:
                         # print(f"file: {file_metadata["filename"]} len: {
                         #       len(tiktoken.encoding_for_model(EMBEDDING_MODEL).encode(doc))}")
-                        vector_store.add(
+                        vector_store.upsert(
                             documents=[doc.replace('\n', ' ').strip()],
                             metadatas=[file_metadata],
                             ids=[f"{file_path}"]
@@ -80,7 +80,7 @@ async def process_file(file_path: Path, vector_store, file_metadata, chunk_id_co
                         ]
                         chunk_metadatas = [
                             file_metadata for _ in range(len(chunks))]
-                        vector_store.add(
+                        vector_store.upsert(
                             documents=chunks,
                             metadatas=chunk_metadatas,
                             ids=chunk_ids

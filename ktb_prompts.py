@@ -651,5 +651,5 @@ def generate_readme_prompt(blocks, korean=False):
     return template
 
 
-print(generate_readme_prompt(['OVERVIEW_BLOCK', 'STRUCTURE_BLOCK', 'START_BLOCK', 'MOTIVATION_BLOCK',
-      'DEMO_BLOCK', 'DEPLOYMENT_BLOCK', 'CONTRIBUTORS_BLOCK', 'FAQ_BLOCK', 'PERFORMANCE_BLOCK'], korean=True))
+# print(generate_readme_prompt(['OVERVIEW_BLOCK', 'STRUCTURE_BLOCK', 'START_BLOCK', 'MOTIVATION_BLOCK',
+#       'DEMO_BLOCK', 'DEPLOYMENT_BLOCK', 'CONTRIBUTORS_BLOCK', 'FAQ_BLOCK', 'PERFORMANCE_BLOCK'], korean=True))

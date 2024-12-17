@@ -107,12 +107,10 @@ async def prepare_repository(repo_url: str, s3_path: str) -> Tuple[str, str, str
         download_zip_from_s3(BUCKET_NAME, s3_path, repo_path)
         while not os.path.exists(repo_path):
             await asyncio.sleep(0.1)
-
         # 압축 해제 및 완료 확인
         extract_zip(repo_path, clone_dir)
         while not os.path.exists(clone_dir) or not os.listdir(clone_dir):
             await asyncio.sleep(0.1)
-
         print(f"Repository extraction completed: {clone_dir}")
 
         return repo_path, clone_dir, repo_name, user_name
@@ -206,7 +204,7 @@ async def perform_tasks_and_cleanup(tasks, cleanup_args, db_name, clone_dir):
     # generated_files_dir = os.path.join(clone_dir, "dododocs")  # 생성된 파일이 저장된 디렉토리
     # await add_data_to_db(db_name, clone_dir, [".md"])  # 생성된 파일 저장
     print(f"add_data_to_db 완료: {db_name}, {clone_dir}")
-    # await async_cleanup(*cleanup_args)  # cleanup 실행
+    await async_cleanup(*cleanup_args)  # cleanup 실행
 
 
 @app.post("/generate")

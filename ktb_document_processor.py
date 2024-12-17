@@ -209,14 +209,13 @@ class DocumentProcessor:
         # 모든 태스크 실행 및 결과 반환
         try:
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            print(f"results length: {len(results)}")
+
             # README와 Usage 병합
             if len(results) > 1 and isinstance(results[0], str) and isinstance(results[1], str):
                 merged_content = self._update_readme_with_usage(
                     results[0], results[1])
                 await self._save_readme(merged_content, clone_dir, user_name, repo_name)
             elif isinstance(results[0], str):
-                print("README만 있음")
                 await self._save_readme(results[0], clone_dir, user_name, repo_name)
             end_time = time.perf_counter()
             print(f"README 및 Usage 생성 완료 처리 시간: {end_time - start_time} 초")
@@ -586,7 +585,7 @@ class DocumentProcessor:
         try:
             async with aiofiles.open(readme_path, "w", encoding="utf-8") as f:
                 await f.write(remove_markdown_blocks(content))
-            print(f"README가 저장되었습니다: {readme_path}")
+            print(f"README.md 업로드")
             await upload_to_s3(BUCKET_NAME, readme_path, f"{user_name}_{repo_name}_README.md")
         except Exception as e:
             logger.error(f"README 저장 중 오류: {str(e)}")

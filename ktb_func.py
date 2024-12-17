@@ -58,7 +58,7 @@ def parse_repo_url(repo_url):
     # Example implementation, adjust based on actual URL structure
     parts = repo_url.rstrip('/').split('/')
     user_name = parts[-3]
-    repo_with_branch = parts[-2]+'/'+parts[-1]
+    repo_with_branch = parts[-2]+'_'+parts[-1]
     return user_name, repo_with_branch
 
 
@@ -69,12 +69,10 @@ def download_zip_from_s3(BUCKET_NAME, object_key, download_path):
     # 디렉토리가 없으면 생성
     if download_dir and not os.path.exists(download_dir):
         os.makedirs(download_dir)
-        print(f"디렉토리 생성됨: {download_dir}")
     try:
         # 파일 다운로드
-        print(f"파일 다운로드 시작: {object_key}, {download_path}")
         s3.download_file(BUCKET_NAME, object_key, download_path)
-        print(f"파일이 성공적으로 다운로드되었습니다: {object_key}")
+
     except Exception as e:
         print(f"파일 다운로드 중 오류 발생: {str(e)}")
     # s3.download_file(BUCKET_NAME, object_key, download_path)
@@ -120,6 +118,7 @@ async def async_cleanup(repo_zip: str, clone_dir: str, doc_zip: str):
 async def upload_to_s3(bucket: str, file_path: str, key: str):
     """S3에 파일 업로드"""
     try:
+        print(file_path)
         with open(file_path, 'rb') as file:
             await asyncio.to_thread(
                 s3.upload_fileobj,
