@@ -15,3 +15,4 @@ google-generativeai
 chonkie
 aws-lambda-powertools
 autotiktokenizer
+pillow
