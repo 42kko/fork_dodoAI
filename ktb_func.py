@@ -53,20 +53,13 @@ def check_service_annotation(java_files, include_tests=INCLUDE_TEST):
     return classified_files
 
 
-def parse_repo_url(repo_url: str):
-    # URL 파싱
-    parsed_url = urlparse(repo_url)
-
-    # path에서 'user/repo.git' 추출 후 처리
-    path_parts = parsed_url.path.strip('/').split('/')
-
-    if len(path_parts) != 2:
-        raise ValueError(f"잘못된 레포지토리 URL: {repo_url}")
-
-    user_name, repo_name = path_parts
-    repo_name = repo_name.replace('.git', '')  # '.git' 제거
-
-    return repo_name, user_name
+def parse_repo_url(repo_url):
+    """Extract user and repo name from the repo URL"""
+    # Example implementation, adjust based on actual URL structure
+    parts = repo_url.rstrip('/').split('/')
+    user_name = parts[-3]
+    repo_with_branch = parts[-2]+'/'+parts[-1]
+    return user_name, repo_with_branch
 
 
 def download_zip_from_s3(BUCKET_NAME, object_key, download_path):
