@@ -286,7 +286,7 @@ def evaluate_response(response: str) -> bool:
 def codebase_chat(query: str, repo_url: str, chat_history: List[dict] = None, stream: bool = False) -> Union[str, Generator]:
     """채팅 응답 생성"""
     try:
-        repo_name, _ = parse_repo_url(repo_url)
+        user_name, repo_name = parse_repo_url(repo_url)
         vector_store_source = chroma_client.get_collection(
             name=f"{repo_name}_source",
             embedding_function=embedding_function

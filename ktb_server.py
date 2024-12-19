@@ -99,7 +99,7 @@ async def prepare_repository(repo_url: str, s3_path: str) -> Tuple[str, str, str
     try:
         # 저장소 경로 파싱
         print("Repository preparation started")
-        repo_name, user_name = parse_repo_url(repo_url)
+        user_name, repo_name = parse_repo_url(repo_url)
         current_directory = os.getcwd()
         repo_path = os.path.join(current_directory, f"{repo_name}.zip")
         clone_dir = os.path.join(current_directory, f"{user_name}_{repo_name}")
@@ -238,7 +238,7 @@ async def generate(request: DocRequest, background_tasks: BackgroundTasks):
             else:
                 tasks.append(asyncio.create_task(
                     perform_readme_only_generation(
-                        repo_dir, clone_dir, repo_name, user_name, request.korean, request.blocks)
+                        request.repo_url, clone_dir, repo_name, user_name, request.korean, request.blocks)
                 ))
                 response = {"readme_s3_key": readme_s3_key,
                             "docs_s3_key": None}
@@ -365,7 +365,10 @@ async def chat(request: ChatRequest):
 
     except Exception as error:
         logger.error(f"채팅 오류: {str(error)}", exc_info=True)
-        return {"answer": f"Error: {str(error)}"}
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error: {str(error)}"
+        )
 
 
 async def test(task_name: str):
@@ -378,7 +381,7 @@ async def test(task_name: str):
 async def generate_image(request: ImageRequest):
     """이미지 생성 엔드포인트"""
     try:
-        repo_name, user_name = parse_repo_url(request.repo_url)
+        user_name, repo_name = parse_repo_url(request.repo_url)
         s3_path = f"{user_name}_{repo_name}_README.md"
         current_directory = os.getcwd()
         repo_path = os.path.join(current_directory, s3_path)

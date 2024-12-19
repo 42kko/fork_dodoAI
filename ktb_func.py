@@ -69,6 +69,7 @@ def download_zip_from_s3(BUCKET_NAME, object_key, download_path):
     # 디렉토리가 없으면 생성
     if download_dir and not os.path.exists(download_dir):
         os.makedirs(download_dir)
+    print(f"Downloading file from S3: {object_key} to {download_path}")
     try:
         # 파일 다운로드
         s3.download_file(BUCKET_NAME, object_key, download_path)

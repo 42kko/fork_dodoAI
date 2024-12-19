@@ -10,13 +10,13 @@ from token_chunker import TokenChunker
 # .env 파일 로드
 load_dotenv()
 
-# # 환경 변수 가져오기
-# OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-# ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
-# AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
-# AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
-# GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-# # 필수 환경 변수 확인
+# 환경 변수 가져오기
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
+AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
+AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+# 필수 환경 변수 확인
 # required_vars = [
 #     'OPENAI_API_KEY',
 #     'ANTHROPIC_API_KEY',
