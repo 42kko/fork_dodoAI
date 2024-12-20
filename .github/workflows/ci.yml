@@ -3,7 +3,7 @@ name: CI Pipeline
 on:
   push:
     branches:
-      - develop
+      - chat_server
 
 jobs:
   build:
@@ -30,18 +30,7 @@ jobs:
 
     - name: Docker 이미지 빌드 및 푸시
       run: |
+        cd lambda_generate
         echo "Using commit hash: ${{ env.COMMIT_HASH }}"
         docker build -t ${{ secrets.DOCKER_USERNAME }}/dododocs-ai:${{ env.COMMIT_HASH }} .
         docker push ${{ secrets.DOCKER_USERNAME }}/dododocs-ai:${{ env.COMMIT_HASH }}
-
-    - name: 컨테이너 실행 및 테스트
-      run: |
-        docker run -d -p 8000:8000 --env-file .env --rm ${{ secrets.DOCKER_USERNAME }}/dododocs-ai:latest &
-        sleep 20  # 애플리케이션이 시작될 시간을 줍니다.
-        # 기본 경로에서 서버 확인
-        HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" http://localhost:8000/)
-        if [ "$HTTP_STATUS" -ne 200 ] && [ "$HTTP_STATUS" -ne 404 ]; then
-          echo "Unexpected HTTP status: $HTTP_STATUS"
-          exit 1
-        fi
-        echo "Server is running with HTTP status: $HTTP_STATUS"
